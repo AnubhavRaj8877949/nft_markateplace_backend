@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  address   String   @unique
+  createdAt DateTime @default(now())
+  nfts      NFT[]
+  listings  Listing[]
+  offers    Offer[]
+}
+
+model NFT {
+  id        String   @id @default(uuid())
+  tokenId   String
+  contractAddress String
+  ownerAddress String
+  tokenURI  String
+  name      String?
+  description String?
+  image     String?
+  collectionId String?
+  createdAt DateTime @default(now())
+  
+  owner     User     @relation(fields: [ownerAddress], references: [address])
+  collection Collection? @relation(fields: [collectionId], references: [id])
+  listings  Listing[]
+  media     Media[]
+  offers    Offer[]
+
+  @@unique([contractAddress, tokenId])
+}
+
+model Collection {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  image       String?
+  createdAt   DateTime @default(now())
+  nfts        NFT[]
+}
+
+model Media {
+  id        String   @id @default(uuid())
+  url       String
+  type      String   // IMAGE, VIDEO
+  nftId     String
+  nft       NFT      @relation(fields: [nftId], references: [id])
+}
+
+model Listing {
+  id        String   @id @default(uuid())
+  price     String
+  sellerAddress String
+  nftId     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  seller    User     @relation(fields: [sellerAddress], references: [address])
+  nft       NFT      @relation(fields: [nftId], references: [id])
+}
+
+model Offer {
+  id        String   @id @default(uuid())
+  price     String
+  offererAddress String
+  nftId     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  offerer   User     @relation(fields: [offererAddress], references: [address])
+  nft       NFT      @relation(fields: [nftId], references: [id])
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  type      String   // LIST, BUY, CANCEL, MINT, OFFER_CREATED, OFFER_ACCEPTED, OFFER_CANCELED
+  data      Json
+  blockNumber Int
+  transactionHash String @unique
+  createdAt DateTime @default(now())
+}
