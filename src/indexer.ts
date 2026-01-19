@@ -11,7 +11,7 @@ const MARKETPLACE_ABI = [
     "event ItemCanceled(address indexed seller, address indexed nftAddress, uint256 indexed tokenId)",
     "event ItemBought(address indexed buyer, address indexed nftAddress, uint256 indexed tokenId, uint256 price)",
     "event OfferCreated(address indexed offerer, address indexed nftAddress, uint256 indexed tokenId, uint256 price)",
-    "event OfferAccepted(address indexed seller, address indexed offerer, address indexed nftAddress, uint256 indexed tokenId, uint256 price)",
+    "event OfferAccepted(address indexed seller, address indexed offerer, address indexed nftAddress, uint256 tokenId, uint256 price)",
     "event OfferCanceled(address indexed offerer, address indexed nftAddress, uint256 indexed tokenId)"
 ];
 
