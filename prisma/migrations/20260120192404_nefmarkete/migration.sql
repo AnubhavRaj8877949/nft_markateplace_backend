@@ -80,6 +80,20 @@ CREATE TABLE "Event" (
     CONSTRAINT "Event_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "NFTHistory" (
+    "id" TEXT NOT NULL,
+    "nftId" TEXT NOT NULL,
+    "fromAddress" TEXT NOT NULL,
+    "toAddress" TEXT NOT NULL,
+    "price" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "txHash" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "NFTHistory_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_address_key" ON "User"("address");
 
@@ -91,6 +105,15 @@ CREATE UNIQUE INDEX "Collection_name_key" ON "Collection"("name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Event_transactionHash_key" ON "Event"("transactionHash");
+
+-- CreateIndex
+CREATE INDEX "NFTHistory_nftId_idx" ON "NFTHistory"("nftId");
+
+-- CreateIndex
+CREATE INDEX "NFTHistory_fromAddress_idx" ON "NFTHistory"("fromAddress");
+
+-- CreateIndex
+CREATE INDEX "NFTHistory_toAddress_idx" ON "NFTHistory"("toAddress");
 
 -- AddForeignKey
 ALTER TABLE "NFT" ADD CONSTRAINT "NFT_ownerAddress_fkey" FOREIGN KEY ("ownerAddress") REFERENCES "User"("address") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -112,3 +135,12 @@ ALTER TABLE "Offer" ADD CONSTRAINT "Offer_offererAddress_fkey" FOREIGN KEY ("off
 
 -- AddForeignKey
 ALTER TABLE "Offer" ADD CONSTRAINT "Offer_nftId_fkey" FOREIGN KEY ("nftId") REFERENCES "NFT"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NFTHistory" ADD CONSTRAINT "NFTHistory_nftId_fkey" FOREIGN KEY ("nftId") REFERENCES "NFT"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NFTHistory" ADD CONSTRAINT "NFTHistory_fromAddress_fkey" FOREIGN KEY ("fromAddress") REFERENCES "User"("address") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NFTHistory" ADD CONSTRAINT "NFTHistory_toAddress_fkey" FOREIGN KEY ("toAddress") REFERENCES "User"("address") ON DELETE RESTRICT ON UPDATE CASCADE;
