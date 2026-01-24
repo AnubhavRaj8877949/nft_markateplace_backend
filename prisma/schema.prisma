@@ -14,6 +14,8 @@ model User {
   nfts      NFT[]
   listings  Listing[]
   offers    Offer[]
+  historyFrom NFTHistory[] @relation("HistoryFrom")
+  historyTo   NFTHistory[] @relation("HistoryTo")
 }
 
 model NFT {
@@ -33,6 +35,7 @@ model NFT {
   listings  Listing[]
   media     Media[]
   offers    Offer[]
+  history   NFTHistory[]
 
   @@unique([contractAddress, tokenId])
 }
@@ -85,4 +88,25 @@ model Event {
   blockNumber Int
   transactionHash String @unique
   createdAt DateTime @default(now())
+}
+
+model NFTHistory {
+  id        String   @id @default(uuid())
+  nftId     String
+  nft       NFT      @relation(fields: [nftId], references: [id])
+  
+  fromAddress String
+  from        User     @relation("HistoryFrom", fields: [fromAddress], references: [address])
+  
+  toAddress   String
+  to          User     @relation("HistoryTo", fields: [toAddress], references: [address])
+  
+  price     String
+  type      String   // MINT, SALE, TRANSFER
+  txHash    String
+  createdAt DateTime @default(now())
+
+  @@index([nftId])
+  @@index([fromAddress])
+  @@index([toAddress])
 }

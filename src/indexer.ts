@@ -49,7 +49,7 @@ async function main() {
                 const transferLogs = await nftContract.queryFilter("Transfer", fromBlock, toBlock);
                 for (const log of transferLogs) {
                     const { from, to, tokenId } = (log as any).args;
-                    await handleTransfer(from, to, tokenId, nftContract);
+                    await handleTransfer(from, to, tokenId, nftContract, log.transactionHash);
                 }
 
                 // 2. Scan Marketplace Listings
@@ -62,8 +62,8 @@ async function main() {
                 // 3. Scan Marketplace Purchases
                 const boughtLogs = await marketplaceContract.queryFilter("ItemBought", fromBlock, toBlock);
                 for (const log of boughtLogs) {
-                    const { buyer, nftAddress, tokenId } = (log as any).args;
-                    await handleItemBought(buyer, nftAddress, tokenId);
+                    const { buyer, nftAddress, tokenId, price } = (log as any).args;
+                    await handleItemBought(buyer, nftAddress, tokenId, price, log.transactionHash);
                 }
 
                 // 4. Scan Marketplace Cancellations
@@ -83,7 +83,7 @@ async function main() {
                 const offerAcceptedLogs = await marketplaceContract.queryFilter("OfferAccepted", fromBlock, toBlock);
                 for (const log of offerAcceptedLogs) {
                     const { seller, offerer, nftAddress, tokenId, price } = (log as any).args;
-                    await handleOfferAccepted(seller, offerer, nftAddress, tokenId, price);
+                    await handleOfferAccepted(seller, offerer, nftAddress, tokenId, price, log.transactionHash);
                 }
 
                 const offerCanceledLogs = await marketplaceContract.queryFilter("OfferCanceled", fromBlock, toBlock);
@@ -102,7 +102,7 @@ async function main() {
     }
 }
 
-async function handleTransfer(from: string, to: string, tokenId: any, nftContract: ethers.Contract) {
+async function handleTransfer(from: string, to: string, tokenId: any, nftContract: ethers.Contract, txHash: string) {
     const normalizedTo = to.toLowerCase();
     const normalizedFrom = from.toLowerCase();
     const tokenIdStr = tokenId.toString();
@@ -203,6 +203,30 @@ async function handleTransfer(from: string, to: string, tokenId: any, nftContrac
             }
         }
 
+
+        // 6. Record History (Idempotent)
+        const historyType = normalizedFrom === ethers.ZeroAddress ? 'MINT' : 'TRANSFER';
+        const existingHistory = await prisma.nFTHistory.findFirst({
+            where: {
+                txHash: txHash,
+                type: historyType,
+                nftId: nft.id
+            }
+        });
+
+        if (!existingHistory) {
+            await prisma.nFTHistory.create({
+                data: {
+                    nftId: nft.id,
+                    fromAddress: normalizedFrom, // For MINT, this is 0x0
+                    toAddress: normalizedTo,
+                    price: "0",
+                    type: historyType,
+                    txHash: txHash,
+                }
+            });
+        }
+
     } catch (e) {
         console.error("Error indexing Transfer:", e);
     }
@@ -249,7 +273,7 @@ async function handleItemListed(seller: string, nftAddress: string, tokenId: any
     }
 }
 
-async function handleItemBought(buyer: string, nftAddress: string, tokenId: any) {
+async function handleItemBought(buyer: string, nftAddress: string, tokenId: any, price: any, txHash: string) {
     const normalizedBuyer = buyer.toLowerCase();
     const normalizedNftAddress = nftAddress.toLowerCase();
     console.log(`ItemBought: ${normalizedNftAddress} #${tokenId} by ${normalizedBuyer}`);
@@ -264,10 +288,46 @@ async function handleItemBought(buyer: string, nftAddress: string, tokenId: any)
         });
 
         if (nft) {
+            // Find active listing to get the seller
+            const listing = await prisma.listing.findFirst({
+                where: { nftId: nft.id, active: true }
+            });
+
+            const seller = listing ? listing.sellerAddress : ethers.ZeroAddress;
+
+            // Deactivate all offers for this NFT
+            await prisma.offer.updateMany({
+                where: { nftId: nft.id, active: true },
+                data: { active: false }
+            });
+
             await prisma.listing.updateMany({
                 where: { nftId: nft.id, active: true },
-                data: { active: true }
+                data: { active: false } // Fixed bug: active should be false after buy
             });
+
+            // Record Sale History
+            // Record Sale History (Idempotent)
+            const existingSaleHistory = await prisma.nFTHistory.findFirst({
+                where: {
+                    txHash: txHash,
+                    type: 'SALE',
+                    nftId: nft.id
+                }
+            });
+
+            if (!existingSaleHistory) {
+                await prisma.nFTHistory.create({
+                    data: {
+                        nftId: nft.id,
+                        fromAddress: seller,
+                        toAddress: normalizedBuyer,
+                        price: ethers.formatEther(price),
+                        type: 'SALE',
+                        txHash: txHash,
+                    }
+                });
+            }
         }
     } catch (e) {
         console.error("Error indexing ItemBought:", e);
@@ -336,7 +396,7 @@ async function handleOfferCreated(offerer: string, nftAddress: string, tokenId: 
     }
 }
 
-async function handleOfferAccepted(seller: string, offerer: string, nftAddress: string, tokenId: any, price: any) {
+async function handleOfferAccepted(seller: string, offerer: string, nftAddress: string, tokenId: any, price: any, txHash: string) {
     const normalizedOfferer = offerer.toLowerCase();
     const normalizedSeller = seller.toLowerCase();
     const normalizedNftAddress = nftAddress.toLowerCase();
@@ -377,6 +437,29 @@ async function handleOfferAccepted(seller: string, offerer: string, nftAddress: 
             where: { id: nft.id },
             data: { ownerAddress: normalizedOfferer }
         });
+
+        // Record History
+        // Record History (Idempotent)
+        const existingOfferHistory = await prisma.nFTHistory.findFirst({
+            where: {
+                txHash: txHash,
+                type: 'SALE',
+                nftId: nft.id
+            }
+        });
+
+        if (!existingOfferHistory) {
+            await prisma.nFTHistory.create({
+                data: {
+                    nftId: nft.id,
+                    fromAddress: normalizedSeller,
+                    toAddress: normalizedOfferer,
+                    price: ethers.formatEther(price),
+                    type: 'SALE',
+                    txHash: txHash,
+                }
+            });
+        }
     } catch (e) {
         console.error("Error indexing OfferAccepted:", e);
     }

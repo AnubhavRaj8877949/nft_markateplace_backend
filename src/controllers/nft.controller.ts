@@ -51,16 +51,84 @@ export const getNFTDetails = async (req: Request, res: Response) => {
     }
 };
 
+export const getNFTHistory = async (req: Request, res: Response) => {
+    try {
+        const { contractAddress, tokenId } = req.params;
+        // Find NFT first to get internal ID or just query by relation
+        // Better to query by relation on NFTHistory directly if possible, but schema has relation on 'nft'.
+        // We can query NFTHistory where nft matches contractAddress and tokenId.
+        const history = await prisma.nFTHistory.findMany({
+            where: {
+                nft: {
+                    contractAddress: (contractAddress as string).toLowerCase(),
+                    tokenId: tokenId as string,
+                }
+            },
+            include: {
+                from: true,
+                to: true,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+        res.json(history);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching NFT history' });
+    }
+};
+
+export const getNFTPriceHistory = async (req: Request, res: Response) => {
+    try {
+        const { contractAddress, tokenId } = req.params;
+        const history = await prisma.nFTHistory.findMany({
+            where: {
+                nft: {
+                    contractAddress: (contractAddress as string).toLowerCase(),
+                    tokenId: tokenId as string,
+                },
+                type: 'SALE', // Only show completed sales for price graph
+                price: { not: "0" } // Double check to exclude zero price events if any
+            },
+            select: {
+                price: true,
+                createdAt: true,
+            },
+            orderBy: {
+                createdAt: 'asc', // Ascending for graph
+            },
+        });
+        res.json(history);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching NFT price history' });
+    }
+};
+
 export const createNFT = async (req: Request, res: Response) => {
     try {
         const { tokenId, contractAddress, ownerAddress, tokenURI } = req.body;
-        const nft = await prisma.nFT.create({
-            data: {
-                tokenId,
-                contractAddress,
-                ownerAddress,
-                tokenURI,
-            },
+        const nft = await prisma.$transaction(async (tx) => {
+            const newNft = await tx.nFT.create({
+                data: {
+                    tokenId,
+                    contractAddress,
+                    ownerAddress,
+                    tokenURI,
+                },
+            });
+
+            await tx.nFTHistory.create({
+                data: {
+                    nftId: newNft.id,
+                    fromAddress: "0x0000000000000000000000000000000000000000",
+                    toAddress: ownerAddress,
+                    price: "0",
+                    type: "MINT",
+                    txHash: "API_MINT_" + Date.now(), // Placeholder for API-created mints
+                }
+            });
+
+            return newNft;
         });
         res.json(nft);
     } catch (error) {
